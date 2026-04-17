@@ -1,4 +1,191 @@
 <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Swipe Cleaning Mini Game</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+    background: radial-gradient(#1a1a1a, #0d0d0d);
+    font-family: Arial, sans-serif;
+  }
+
+  #game {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  #ui {
+    position: absolute;
+    bottom: 18px;
+    width: 100%;
+    text-align: center;
+    color: white;
+    z-index: 10;
+    user-select: none;
+  }
+
+  #bar {
+    width: 78%;
+    height: 10px;
+    background: rgba(255,255,255,0.15);
+    margin: 10px auto;
+    border-radius: 999px;
+    overflow: hidden;
+    backdrop-filter: blur(6px);
+  }
+
+  #progress {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #00e5ff, #7cffb2);
+    transition: width 0.08s linear;
+  }
+
+  #text {
+    font-size: 14px;
+    opacity: 0.9;
+  }
+
+  #overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    font-size: 18px;
+    background: rgba(0,0,0,0.35);
+    z-index: 20;
+    visibility: hidden;
+  }
+</style>
+</head>
+<body>
+<div id="game">
+  <canvas id="canvas"></canvas>
+  <canvas id="mask"></canvas>
+
+  <div id="overlay">Tap to continue</div>
+
+  <div id="ui">
+    <div id="bar"><div id="progress"></div></div>
+    <div id="text">Swipe to clean</div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const maskCanvas = document.getElementById('mask');
+const maskCtx = maskCanvas.getContext('2d');
+
+let w, h;
+function resize() {
+  w = canvas.width = maskCanvas.width = window.innerWidth;
+  h = canvas.height = maskCanvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ----------------------
+// SCENES
+// ----------------------
+const steps = [
+  { top: 'img1.jpg', bottom: 'img2.jpg' },
+  { top: 'img4.jpg', bottom: 'img3.jpg' },
+  { top: 'img5.jpg', bottom: null }
+];
+
+let step = 0;
+let isDrawing = false;
+let last = null;
+
+// MORE FORGIVING SWIPE
+const brushSize = 85;
+const ease = 0.35;
+
+let topImg = new Image();
+let bottomImg = new Image();
+let topReady = false;
+let bottomReady = false;
+let ready = false;
+
+let revealed = 0;
+let lastProgressTime = 0;
+
+function setReady() {
+  ready = (steps[step].top ? topReady : true) && (steps[step].bottom ? bottomReady : true);
+}
+
+function loadStep(i) {
+  step = i;
+  revealed = 0;
+  ready = false;
+  topReady = false;
+  bottomReady = false;
+
+  topImg = new Image();
+  bottomImg = new Image();
+
+  if (steps[step].top) {
+    topImg.onload = () => { topReady = true; setReady(); };
+    topImg.onerror = () => { topReady = true; setReady(); };
+    topImg.src = steps[step].top;
+  } else topReady = true;
+
+  if (steps[step].bottom) {
+    bottomImg.onload = () => { bottomReady = true; setReady(); };
+    bottomImg.onerror = () => { bottomReady = true; setReady(); };
+    bottomImg.src = steps[step].bottom;
+  } else bottomReady = true;
+
+  maskCtx.clearRect(0, 0, w, h);
+  maskCtx.fillStyle = 'black';
+  maskCtx.fillRect(0, 0, w, h);
+
+  document.getElementById('progress').style.width = '0%';
+  document.getElementById('overlay').style.visibility = 'hidden';
+}
+
+// ----------------------
+// SMOOTH BRUSH STROKE
+// ----------------------
+function drawLine(x, y) {
+  if (!last) last = { x, y };
+
+  const dx = x - last.x;
+  const dy = y - last.y;
+
+  const steps = Math.max(1, Math.floor(Math.hypot(dx, dy) / 2));
+
+  for (let i = 0; i <= steps; i++) {
+    const px = last.x + dx * (i / steps);
+    const py = last.y + dy * (i / steps);
+
+    const grad = maskCtx.createRadialGradient(px, py, 0, px, py, brushSize);
+    grad.addColorStop(0, 'rgba(0,0,0,0.9)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+
+    maskCtx.globalCompositeOperation = 'destination-out';
+    maskCtx.fillStyle = grad;
+    maskCtx.beginPath();
+    maskCtx.arc(px, py, brushSize, 0, Math.PI * 2);
+    maskCtx.fill();
   }
 
   last = { x, y };
