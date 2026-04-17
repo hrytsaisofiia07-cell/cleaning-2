@@ -3,14 +3,40 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Swipe Clean FIXED</title>
-
+<title>Swipe Cleaning Mini Game</title>
 <style>
 html,body{
   margin:0;
   height:100%;
   overflow:hidden;
   background:#111;
+  font-family:Arial;
+}
+
+#ui{
+  position:absolute;
+  bottom:18px;
+  width:100%;
+  text-align:center;
+  color:white;
+  z-index:10;
+  user-select:none;
+}
+
+#bar{
+  width:78%;
+  height:10px;
+  background:rgba(255,255,255,0.15);
+  margin:10px auto;
+  border-radius:999px;
+  overflow:hidden;
+}
+
+#progress{
+  height:100%;
+  width:0%;
+  background:linear-gradient(90deg,#00e5ff,#7cffb2);
+  transition:width 0.08s linear;
 }
 
 canvas{
@@ -18,127 +44,157 @@ canvas{
   top:0;
   left:0;
 }
+
+#overlay{
+  position:absolute;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  color:white;
+  font-size:18px;
+  background:rgba(0,0,0,0.35);
+  z-index:20;
+  visibility:hidden;
+}
 </style>
 </head>
-
 <body>
+
+<div id="ui">
+  <div id="bar"><div id="progress"></div></div>
+  <div>Swipe to clean</div>
+</div>
+
+<div id="overlay">Tap to continue</div>
 
 <canvas id="view"></canvas>
 <canvas id="mask"></canvas>
 
 <script>
-const view = document.getElementById("view");
-const vctx = view.getContext("2d");
-
-const mask = document.getElementById("mask");
-const mctx = mask.getContext("2d");
+const view=document.getElementById("view");
+const vctx=view.getContext("2d");
+const mask=document.getElementById("mask");
+const mctx=mask.getContext("2d");
 
 let w,h;
-
 function resize(){
-  w = view.width = mask.width = innerWidth;
-  h = view.height = mask.height = innerHeight;
+  w=view.width=mask.width=innerWidth;
+  h=view.height=mask.height=innerHeight;
 }
-window.addEventListener("resize", resize);
+window.addEventListener("resize",resize);
 resize();
 
-
-// 🎮 SCENES (FIXED as you requested)
-const steps = [
-  { top:"img1.jpg", bottom:"img2.jpg" },
-  { top:"img4.jpg", bottom:"img5.jpg" }
+// 🎮 LEVELS
+const steps=[
+  {top:"img1.jpg",bottom:"img2.jpg"},
+  {top:"img4.jpg",bottom:"img5.jpg"}
 ];
 
-let step = 0;
+let step=0;
+let drawing=false;
+let progress=0;
 
-// images
-let topImg = new Image();
-let bottomImg = new Image();
+const brush=90;
 
-function loadStep(){
-  topImg = new Image();
-  bottomImg = new Image();
-
-  topImg.src = steps[step].top;
-  bottomImg.src = steps[step].bottom;
-
-  resetMask();
-}
+let topImg=new Image();
+let bottomImg=new Image();
 
 function resetMask(){
   mctx.clearRect(0,0,w,h);
-  mctx.fillStyle = "black";
+  mctx.fillStyle="black";
   mctx.fillRect(0,0,w,h);
 }
 
-loadStep();
+function load(){
+  topImg=new Image();
+  bottomImg=new Image();
 
+  topImg.src=steps[step].top;
+  bottomImg.src=steps[step].bottom;
 
-// 🧽 brush
-const brush = 80;
-let drawing = false;
+  resetMask();
+  progress=0;
+  document.getElementById("progress").style.width="0%";
+  document.getElementById("overlay").style.visibility="hidden";
+}
 
-// convert coords properly
+load();
+
 function pos(e){
-  const t = e.touches ? e.touches[0] : e;
-  return {x:t.clientX,y:t.clientY};
+  const t=e.touches?e.touches[0]:e;
+  return{x:t.clientX,y:t.clientY};
 }
 
 function scratch(x,y){
-  mctx.globalCompositeOperation = "destination-out";
+  mctx.globalCompositeOperation="destination-out";
 
-  const g = mctx.createRadialGradient(x,y,0,x,y,brush);
+  const g=mctx.createRadialGradient(x,y,0,x,y,90);
   g.addColorStop(0,"rgba(0,0,0,1)");
   g.addColorStop(1,"rgba(0,0,0,0)");
 
-  mctx.fillStyle = g;
+  mctx.fillStyle=g;
   mctx.beginPath();
-  mctx.arc(x,y,brush,0,Math.PI*2);
+  mctx.arc(x,y,90,0,Math.PI*2);
   mctx.fill();
 
-  mctx.globalCompositeOperation = "source-over";
+  mctx.globalCompositeOperation="source-over";
+
+  // 🎯 EASY PROGRESS (fast fill)
+  progress+=2.2;
+  if(progress>100)progress=100;
+
+  document.getElementById("progress").style.width=progress+"%";
+
+  if(progress>=100){
+    document.getElementById("overlay").style.visibility="visible";
+  }
 }
 
-
-// 🎨 RENDER (THIS IS THE FIX)
 function render(){
   vctx.clearRect(0,0,w,h);
 
-  // 1. draw bottom FIRST
   if(bottomImg.complete){
     vctx.drawImage(bottomImg,0,0,w,h);
   }
 
-  // 2. draw top ON TOP
   if(topImg.complete){
     vctx.drawImage(topImg,0,0,w,h);
   }
 
-  // 3. erase TOP using mask
-  vctx.globalCompositeOperation = "destination-out";
+  vctx.globalCompositeOperation="destination-out";
   vctx.drawImage(mask,0,0);
-  vctx.globalCompositeOperation = "source-over";
+  vctx.globalCompositeOperation="source-over";
 
   requestAnimationFrame(render);
 }
 render();
 
-
-// 🎮 INPUT
-window.addEventListener("pointerdown",(e)=>{
-  drawing = true;
-  const p = pos(e);
+window.addEventListener("pointerdown",e=>{
+  drawing=true;
+  const p=pos(e);
   scratch(p.x,p.y);
 });
 
-window.addEventListener("pointermove",(e)=>{
-  if(!drawing) return;
-  const p = pos(e);
+window.addEventListener("pointermove",e=>{
+  if(!drawing)return;
+  const p=pos(e);
   scratch(p.x,p.y);
 });
 
 window.addEventListener("pointerup",()=>drawing=false);
 
+// 👉 NEXT LEVEL ALWAYS ALLOWED (but smoother UX)
+document.getElementById("overlay").addEventListener("click",()=>{
+  step++;
+  if(step>=steps.length) step=steps.length-1;
+  load();
+});
+
+console.assert(steps.length===2,"levels missing");
 </script>
 
 </body>
