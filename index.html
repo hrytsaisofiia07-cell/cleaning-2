@@ -1,200 +1,316 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Swipe Cleaning Mini Game</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Swipe Clean Game</title>
+
 <style>
-html,body{
-  margin:0;
-  height:100%;
-  overflow:hidden;
-  background:#111;
-  font-family:Arial;
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #111;
+  font-family: sans-serif;
+  touch-action: none;
 }
 
-#ui{
-  position:absolute;
-  bottom:18px;
-  width:100%;
-  text-align:center;
-  color:white;
-  z-index:10;
-  user-select:none;
+canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
 }
 
-#bar{
-  width:78%;
-  height:10px;
-  background:rgba(255,255,255,0.15);
-  margin:10px auto;
-  border-radius:999px;
-  overflow:hidden;
+/* START SCREEN */
+#startScreen {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  z-index: 10;
 }
 
-#progress{
-  height:100%;
-  width:0%;
-  background:linear-gradient(90deg,#00e5ff,#7cffb2);
-  transition:width 0.08s linear;
+#startScreen button {
+  margin-top: 20px;
+  padding: 12px 20px;
+  font-size: 18px;
 }
 
-canvas{
-  position:absolute;
-  top:0;
-  left:0;
+/* UI TEXT */
+#text {
+  position: absolute;
+  bottom: 30px;
+  width: 100%;
+  text-align: center;
+  color: white;
+  font-size: 18px;
+  opacity: 0;
 }
 
-#overlay{
-  position:absolute;
-  top:0;
-  left:0;
-  width:100%;
-  height:100%;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  color:white;
-  font-size:18px;
-  background:rgba(0,0,0,0.35);
-  z-index:20;
-  visibility:hidden;
+/* STARS */
+.star {
+  position: absolute;
+  font-size: 22px;
+  animation: float 1s ease-out forwards;
+}
+
+@keyframes float {
+  to {
+    transform: translateY(-120px);
+    opacity: 0;
+  }
 }
 </style>
 </head>
+
 <body>
 
-<div id="ui">
-  <div id="bar"><div id="progress"></div></div>
-  <div>Swipe to clean</div>
+<!-- RULES -->
+<div id="startScreen">
+  <h2>🧼 Правила</h2>
+  <p>Проведи пальцем, чтобы очистить зеркало<br>и увидеть, что скрыто под ним</p>
+  <button onclick="startGame()">Начать</button>
 </div>
 
-<div id="overlay">Tap to continue</div>
-
-<canvas id="view"></canvas>
-<canvas id="mask"></canvas>
+<canvas id="c"></canvas>
+<div id="text">Нажми чтобы продолжить</div>
 
 <script>
-const view=document.getElementById("view");
-const vctx=view.getContext("2d");
-const mask=document.getElementById("mask");
-const mctx=mask.getContext("2d");
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
 
-let w,h;
-function resize(){
-  w=view.width=mask.width=innerWidth;
-  h=view.height=mask.height=innerHeight;
+const mask = document.createElement("canvas");
+const mctx = mask.getContext("2d");
+
+const topCanvas = document.createElement("canvas");
+const tctx = topCanvas.getContext("2d");
+
+let w, h;
+
+// --- resize ---
+function resize() {
+  w = canvas.width = window.innerWidth;
+  h = canvas.height = window.innerHeight;
+
+  mask.width = w;
+  mask.height = h;
+
+  topCanvas.width = w;
+  topCanvas.height = h;
+
+  // полностью "закрашиваем" маску
+  mctx.globalCompositeOperation = "source-over";
+  mctx.fillStyle = "black";
+  mctx.fillRect(0, 0, w, h);
 }
-window.addEventListener("resize",resize);
-resize();
+window.addEventListener("resize", resize);
 
-// 🎮 LEVELS
-const steps=[
-  {top:"img1.jpg",bottom:"img2.jpg"},
-  {top:"img4.jpg",bottom:"img5.jpg"}
-];
+// --- sounds ---
+const wipeSound = new Audio("wipe.mp3");
+wipeSound.loop = true;
 
-let step=0;
-let drawing=false;
-let progress=0;
+const winSound = new Audio("win.mp3");
 
-const brush=90;
+// --- IMAGES (ИСПРАВЛЕННЫЙ ПОРЯДОК) ---
+const sources = {
+  // 🪟 СНАЧАЛА ЗАПОТЕВШЕЕ ЗЕРКАЛО
+  top1: "img2.jpg",     // foggy (СТИРАЕМ)
+  bottom1: "img1.jpg",  // девушка появляется
 
-let topImg=new Image();
-let bottomImg=new Image();
+  // второй этап
+  top2: "img3.jpg",
+  bottom2: "img4.jpg",
 
-function resetMask(){
-  mctx.clearRect(0,0,w,h);
-  mctx.fillStyle="black";
-  mctx.fillRect(0,0,w,h);
+  // финал
+  final: "img5.jpg"
+};
+
+const img = {};
+let loaded = 0;
+
+for (let k in sources) {
+  const i = new Image();
+  i.src = sources[k];
+  i.onload = () => {
+    loaded++;
+    if (loaded === Object.keys(sources).length) init();
+  };
+  img[k] = i;
 }
 
-function load(){
-  topImg=new Image();
-  bottomImg=new Image();
+// --- state ---
+let step = 1;
+let drawing = false;
+let lastX = 0;
+let lastY = 0;
+let progress = 0;
+let gameStarted = false;
 
-  topImg.src=steps[step].top;
-  bottomImg.src=steps[step].bottom;
-
-  resetMask();
-  progress=0;
-  document.getElementById("progress").style.width="0%";
-  document.getElementById("overlay").style.visibility="hidden";
+// --- start ---
+function startGame() {
+  document.getElementById("startScreen").style.display = "none";
+  gameStarted = true;
+  resize();
+  draw();
 }
 
-load();
-
-function pos(e){
-  const t=e.touches?e.touches[0]:e;
-  return{x:t.clientX,y:t.clientY};
+// --- coords ---
+function getPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) * (canvas.width / rect.width),
+    y: (e.clientY - rect.top) * (canvas.height / rect.height)
+  };
 }
 
-function scratch(x,y){
-  mctx.globalCompositeOperation="destination-out";
+// --- brush ---
+function brush(x, y) {
+  const r = 60;
 
-  const g=mctx.createRadialGradient(x,y,0,x,y,90);
-  g.addColorStop(0,"rgba(0,0,0,1)");
-  g.addColorStop(1,"rgba(0,0,0,0)");
+  mctx.globalCompositeOperation = "destination-out";
 
-  mctx.fillStyle=g;
+  const g = mctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, "rgba(0,0,0,1)");
+  g.addColorStop(1, "rgba(0,0,0,0)");
+
+  mctx.fillStyle = g;
   mctx.beginPath();
-  mctx.arc(x,y,90,0,Math.PI*2);
+  mctx.arc(x, y, r, 0, Math.PI * 2);
   mctx.fill();
 
-  mctx.globalCompositeOperation="source-over";
+  progress += 0.01;
 
-  // 🎯 EASY PROGRESS (fast fill)
-  progress+=2.2;
-  if(progress>100)progress=100;
-
-  document.getElementById("progress").style.width=progress+"%";
-
-  if(progress>=100){
-    document.getElementById("overlay").style.visibility="visible";
+  if (progress > 0.35) {
+    document.getElementById("text").style.opacity = 1;
   }
 }
 
-function render(){
-  vctx.clearRect(0,0,w,h);
+// --- smooth line ---
+function line(x1, y1, x2, y2) {
+  const dist = Math.hypot(x2 - x1, y2 - y1);
+  const steps = dist / 4;
 
-  if(bottomImg.complete){
-    vctx.drawImage(bottomImg,0,0,w,h);
+  for (let i = 0; i < steps; i++) {
+    const x = x1 + (x2 - x1) * (i / steps);
+    const y = y1 + (y2 - y1) * (i / steps);
+    brush(x, y);
   }
-
-  if(topImg.complete){
-    vctx.drawImage(topImg,0,0,w,h);
-  }
-
-  vctx.globalCompositeOperation="destination-out";
-  vctx.drawImage(mask,0,0);
-  vctx.globalCompositeOperation="source-over";
-
-  requestAnimationFrame(render);
 }
-render();
 
-window.addEventListener("pointerdown",e=>{
-  drawing=true;
-  const p=pos(e);
-  scratch(p.x,p.y);
+// --- input ---
+canvas.addEventListener("pointerdown", e => {
+  if (!gameStarted) return;
+
+  drawing = true;
+
+  wipeSound.currentTime = 0;
+  wipeSound.play();
+
+  const p = getPos(e);
+  lastX = p.x;
+  lastY = p.y;
 });
 
-window.addEventListener("pointermove",e=>{
-  if(!drawing)return;
-  const p=pos(e);
-  scratch(p.x,p.y);
+canvas.addEventListener("pointermove", e => {
+  if (!drawing) return;
+  e.preventDefault();
+
+  const p = getPos(e);
+  line(lastX, lastY, p.x, p.y);
+
+  lastX = p.x;
+  lastY = p.y;
 });
 
-window.addEventListener("pointerup",()=>drawing=false);
+canvas.addEventListener("pointerup", () => {
+  drawing = false;
+  wipeSound.pause();
+});
 
-// 👉 NEXT LEVEL ALWAYS ALLOWED (but smoother UX)
-document.getElementById("overlay").addEventListener("click",()=>{
+canvas.addEventListener("click", () => {
+  if (progress > 0.35) next();
+});
+
+// --- stars ---
+function spawnStars() {
+  for (let i = 0; i < 12; i++) {
+    const s = document.createElement("div");
+    s.className = "star";
+    s.innerText = "✨";
+
+    s.style.left = Math.random() * 100 + "%";
+    s.style.top = Math.random() * 100 + "%";
+
+    document.body.appendChild(s);
+
+    setTimeout(() => s.remove(), 1000);
+  }
+}
+
+// --- draw ---
+function draw() {
+  if (!gameStarted) return;
+
+  ctx.clearRect(0, 0, w, h);
+
+  let top, bottom;
+
+  if (step === 1) {
+    top = img.top1;
+    bottom = img.bottom1;
+  } else if (step === 2) {
+    top = img.top2;
+    bottom = img.bottom2;
+  } else {
+    ctx.drawImage(img.final, 0, 0, w, h);
+    return;
+  }
+
+  // нижний слой
+  ctx.drawImage(bottom, 0, 0, w, h);
+
+  // верхний слой
+  tctx.clearRect(0, 0, w, h);
+  tctx.drawImage(top, 0, 0, w, h);
+
+  // стираем верх
+  tctx.globalCompositeOperation = "destination-out";
+  tctx.drawImage(mask, 0, 0);
+  tctx.globalCompositeOperation = "source-over";
+
+  ctx.drawImage(topCanvas, 0, 0);
+
+  requestAnimationFrame(draw);
+}
+
+// --- next ---
+function next() {
   step++;
-  if(step>=steps.length) step=steps.length-1;
-  load();
-});
+  progress = 0;
 
-console.assert(steps.length===2,"levels missing");
+  // восстанавливаем маску
+  mctx.globalCompositeOperation = "source-over";
+  mctx.fillStyle = "black";
+  mctx.fillRect(0, 0, w, h);
+
+  document.getElementById("text").style.opacity = 0;
+
+  winSound.play();
+  spawnStars();
+
+  if (step === 3) {
+    document.getElementById("text").innerText = "🎉 Поздравляем!";
+    document.getElementById("text").style.opacity = 1;
+  }
+}
+
+// --- init ---
+function init() {}
 </script>
 
 </body>
