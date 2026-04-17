@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Swipe Clean Game</title>
+<title>Swipe Clean FIXED</title>
 
 <style>
 html,body{
@@ -11,12 +11,6 @@ html,body{
   height:100%;
   overflow:hidden;
   background:#111;
-}
-
-#wrap{
-  position:relative;
-  width:100%;
-  height:100%;
 }
 
 canvas{
@@ -28,27 +22,28 @@ canvas{
 </head>
 
 <body>
-<div id="wrap">
-  <canvas id="c"></canvas>
-  <canvas id="mask"></canvas>
-</div>
+
+<canvas id="view"></canvas>
+<canvas id="mask"></canvas>
 
 <script>
-const canvas = document.getElementById("c");
-const ctx = canvas.getContext("2d");
+const view = document.getElementById("view");
+const vctx = view.getContext("2d");
 
-const maskCanvas = document.getElementById("mask");
-const maskCtx = maskCanvas.getContext("2d");
+const mask = document.getElementById("mask");
+const mctx = mask.getContext("2d");
 
 let w,h;
+
 function resize(){
-  w = canvas.width = maskCanvas.width = innerWidth;
-  h = canvas.height = maskCanvas.height = innerHeight;
+  w = view.width = mask.width = innerWidth;
+  h = view.height = mask.height = innerHeight;
 }
 window.addEventListener("resize", resize);
 resize();
 
-// 🎮 SCENES
+
+// 🎮 SCENES (FIXED as you requested)
 const steps = [
   { top:"img1.jpg", bottom:"img2.jpg" },
   { top:"img4.jpg", bottom:"img5.jpg" }
@@ -60,14 +55,7 @@ let step = 0;
 let topImg = new Image();
 let bottomImg = new Image();
 
-// mask = "holes"
-function resetMask(){
-  maskCtx.clearRect(0,0,w,h);
-  maskCtx.fillStyle = "black";
-  maskCtx.fillRect(0,0,w,h);
-}
-
-function load(){
+function loadStep(){
   topImg = new Image();
   bottomImg = new Image();
 
@@ -77,70 +65,81 @@ function load(){
   resetMask();
 }
 
-load();
+function resetMask(){
+  mctx.clearRect(0,0,w,h);
+  mctx.fillStyle = "black";
+  mctx.fillRect(0,0,w,h);
+}
+
+loadStep();
+
 
 // 🧽 brush
-const brush = 70;
+const brush = 80;
 let drawing = false;
-let last = null;
 
-function drawScratch(x,y){
-  maskCtx.globalCompositeOperation = "destination-out";
+// convert coords properly
+function pos(e){
+  const t = e.touches ? e.touches[0] : e;
+  return {x:t.clientX,y:t.clientY};
+}
 
-  const g = maskCtx.createRadialGradient(x,y,0,x,y,brush);
+function scratch(x,y){
+  mctx.globalCompositeOperation = "destination-out";
+
+  const g = mctx.createRadialGradient(x,y,0,x,y,brush);
   g.addColorStop(0,"rgba(0,0,0,1)");
   g.addColorStop(1,"rgba(0,0,0,0)");
 
-  maskCtx.fillStyle = g;
-  maskCtx.beginPath();
-  maskCtx.arc(x,y,brush,0,Math.PI*2);
-  maskCtx.fill();
+  mctx.fillStyle = g;
+  mctx.beginPath();
+  mctx.arc(x,y,brush,0,Math.PI*2);
+  mctx.fill();
 
-  maskCtx.globalCompositeOperation = "source-over";
+  mctx.globalCompositeOperation = "source-over";
 }
 
-// 🎨 render loop (IMPORTANT FIX HERE)
+
+// 🎨 RENDER (THIS IS THE FIX)
 function render(){
-  ctx.clearRect(0,0,w,h);
+  vctx.clearRect(0,0,w,h);
 
   // 1. draw bottom FIRST
   if(bottomImg.complete){
-    ctx.drawImage(bottomImg,0,0,w,h);
+    vctx.drawImage(bottomImg,0,0,w,h);
   }
 
-  // 2. draw top
+  // 2. draw top ON TOP
   if(topImg.complete){
-    ctx.drawImage(topImg,0,0,w,h);
+    vctx.drawImage(topImg,0,0,w,h);
   }
 
-  // 3. erase TOP using mask (CRITICAL FIX)
-  ctx.globalCompositeOperation = "destination-out";
-  ctx.drawImage(maskCanvas,0,0);
-  ctx.globalCompositeOperation = "source-over";
+  // 3. erase TOP using mask
+  vctx.globalCompositeOperation = "destination-out";
+  vctx.drawImage(mask,0,0);
+  vctx.globalCompositeOperation = "source-over";
 
   requestAnimationFrame(render);
 }
 render();
 
-// 🎮 input
-function getPos(e){
-  const t = e.touches ? e.touches[0] : e;
-  return {x:t.clientX,y:t.clientY};
-}
 
+// 🎮 INPUT
 window.addEventListener("pointerdown",(e)=>{
   drawing = true;
-  last = getPos(e);
+  const p = pos(e);
+  scratch(p.x,p.y);
 });
 
 window.addEventListener("pointermove",(e)=>{
   if(!drawing) return;
-  const p = getPos(e);
-  drawScratch(p.x,p.y);
+  const p = pos(e);
+  scratch(p.x,p.y);
 });
 
 window.addEventListener("pointerup",()=>drawing=false);
 
 </script>
+
 </body>
 </html>
