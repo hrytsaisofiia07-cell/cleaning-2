@@ -2,273 +2,145 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Swipe Cleaning Mini Game</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Swipe Clean Game</title>
+
 <style>
-  html, body {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    overflow: hidden;
-    background: radial-gradient(#1a1a1a, #0d0d0d);
-    font-family: Arial, sans-serif;
-  }
+html,body{
+  margin:0;
+  height:100%;
+  overflow:hidden;
+  background:#111;
+}
 
-  #game {
-    position: relative;
-    width: 100%;
-    height: 100%;
-  }
+#wrap{
+  position:relative;
+  width:100%;
+  height:100%;
+}
 
-  canvas {
-    position: absolute;
-    top: 0;
-    left: 0;
-  }
-
-  #ui {
-    position: absolute;
-    bottom: 18px;
-    width: 100%;
-    text-align: center;
-    color: white;
-    z-index: 10;
-    user-select: none;
-  }
-
-  #bar {
-    width: 78%;
-    height: 10px;
-    background: rgba(255,255,255,0.15);
-    margin: 10px auto;
-    border-radius: 999px;
-    overflow: hidden;
-    backdrop-filter: blur(6px);
-  }
-
-  #progress {
-    height: 100%;
-    width: 0%;
-    background: linear-gradient(90deg, #00e5ff, #7cffb2);
-    transition: width 0.08s linear;
-  }
-
-  #text {
-    font-size: 14px;
-    opacity: 0.9;
-  }
-
-  #overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    color: white;
-    font-size: 18px;
-    background: rgba(0,0,0,0.35);
-    z-index: 20;
-    visibility: hidden;
-  }
+canvas{
+  position:absolute;
+  top:0;
+  left:0;
+}
 </style>
 </head>
+
 <body>
-<div id="game">
-  <canvas id="canvas"></canvas>
+<div id="wrap">
+  <canvas id="c"></canvas>
   <canvas id="mask"></canvas>
-
-  <div id="overlay">Tap to continue</div>
-
-  <div id="ui">
-    <div id="bar"><div id="progress"></div></div>
-    <div id="text">Swipe to clean</div>
-  </div>
 </div>
 
 <script>
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-const maskCanvas = document.getElementById('mask');
-const maskCtx = maskCanvas.getContext('2d');
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
 
-let w, h;
-function resize() {
-  w = canvas.width = maskCanvas.width = window.innerWidth;
-  h = canvas.height = maskCanvas.height = window.innerHeight;
+const maskCanvas = document.getElementById("mask");
+const maskCtx = maskCanvas.getContext("2d");
+
+let w,h;
+function resize(){
+  w = canvas.width = maskCanvas.width = innerWidth;
+  h = canvas.height = maskCanvas.height = innerHeight;
 }
-window.addEventListener('resize', resize);
+window.addEventListener("resize", resize);
 resize();
 
-// ----------------------
-// SCENES
-// ----------------------
+// 🎮 SCENES
 const steps = [
-  { top: 'img1.jpg', bottom: 'img2.jpg', required: 55 },
-  { top: 'img4.jpg', bottom: 'img3.jpg', required: 60 },
-  { top: 'img5.jpg', bottom: null, required: 40 }
+  { top:"img1.jpg", bottom:"img2.jpg" },
+  { top:"img4.jpg", bottom:"img5.jpg" }
 ];
 
 let step = 0;
-let isDrawing = false;
-let last = null;
 
-const brushSize = 85;
-
+// images
 let topImg = new Image();
 let bottomImg = new Image();
-let topReady = false;
-let bottomReady = false;
-let ready = false;
 
-let strokes = 0;
-
-function setReady() {
-  ready = (steps[step].top ? topReady : true) && (steps[step].bottom ? bottomReady : true);
+// mask = "holes"
+function resetMask(){
+  maskCtx.clearRect(0,0,w,h);
+  maskCtx.fillStyle = "black";
+  maskCtx.fillRect(0,0,w,h);
 }
 
-function loadStep(i) {
-  step = i;
-  strokes = 0;
-  ready = false;
-  topReady = false;
-  bottomReady = false;
-
+function load(){
   topImg = new Image();
   bottomImg = new Image();
 
-  if (steps[step].top) {
-    topImg.onload = () => { topReady = true; setReady(); };
-    topImg.onerror = () => { topReady = true; setReady(); };
-    topImg.src = steps[step].top;
-  } else topReady = true;
+  topImg.src = steps[step].top;
+  bottomImg.src = steps[step].bottom;
 
-  if (steps[step].bottom) {
-    bottomImg.onload = () => { bottomReady = true; setReady(); };
-    bottomImg.onerror = () => { bottomReady = true; setReady(); };
-    bottomImg.src = steps[step].bottom;
-  } else bottomReady = true;
-
-  maskCtx.clearRect(0, 0, w, h);
-  maskCtx.fillStyle = 'black';
-  maskCtx.fillRect(0, 0, w, h);
-
-  document.getElementById('progress').style.width = '0%';
-  document.getElementById('overlay').style.visibility = 'hidden';
+  resetMask();
 }
 
-// ----------------------
-// DRAW
-// ----------------------
-function drawLine(x, y) {
-  if (!last) last = { x, y };
+load();
 
-  const dx = x - last.x;
-  const dy = y - last.y;
-  const dist = Math.hypot(dx, dy);
-  const steps = Math.max(1, Math.floor(dist / 2));
+// 🧽 brush
+const brush = 70;
+let drawing = false;
+let last = null;
 
-  for (let i = 0; i <= steps; i++) {
-    const px = last.x + dx * (i / steps);
-    const py = last.y + dy * (i / steps);
+function drawScratch(x,y){
+  maskCtx.globalCompositeOperation = "destination-out";
 
-    const grad = maskCtx.createRadialGradient(px, py, 0, px, py, brushSize);
-    grad.addColorStop(0, 'rgba(0,0,0,0.9)');
-    grad.addColorStop(1, 'rgba(0,0,0,0)');
+  const g = maskCtx.createRadialGradient(x,y,0,x,y,brush);
+  g.addColorStop(0,"rgba(0,0,0,1)");
+  g.addColorStop(1,"rgba(0,0,0,0)");
 
-    maskCtx.globalCompositeOperation = 'destination-out';
-    maskCtx.fillStyle = grad;
-    maskCtx.beginPath();
-    maskCtx.arc(px, py, brushSize, 0, Math.PI * 2);
-    maskCtx.fill();
-  }
+  maskCtx.fillStyle = g;
+  maskCtx.beginPath();
+  maskCtx.arc(x,y,brush,0,Math.PI*2);
+  maskCtx.fill();
 
-  last = { x, y };
-
-  strokes += 1;
-  updateProgress();
+  maskCtx.globalCompositeOperation = "source-over";
 }
 
-function updateProgress() {
-  const required = steps[step].required;
-  const percent = Math.min(100, (strokes / required) * 100);
+// 🎨 render loop (IMPORTANT FIX HERE)
+function render(){
+  ctx.clearRect(0,0,w,h);
 
-  document.getElementById('progress').style.width = percent + '%';
-
-  if (percent >= 100) {
-    document.getElementById('overlay').style.visibility = 'visible';
+  // 1. draw bottom FIRST
+  if(bottomImg.complete){
+    ctx.drawImage(bottomImg,0,0,w,h);
   }
-}
 
-// ----------------------
-// RENDER
-// ----------------------
-function render() {
-  ctx.clearRect(0, 0, w, h);
-
-  if (ready) {
-    if (steps[step].bottom && bottomImg.complete) {
-      ctx.drawImage(bottomImg, 0, 0, w, h);
-    }
-
-    if (steps[step].top && topImg.complete) {
-      ctx.drawImage(topImg, 0, 0, w, h);
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.drawImage(maskCanvas, 0, 0);
-      ctx.globalCompositeOperation = 'source-over';
-    }
+  // 2. draw top
+  if(topImg.complete){
+    ctx.drawImage(topImg,0,0,w,h);
   }
+
+  // 3. erase TOP using mask (CRITICAL FIX)
+  ctx.globalCompositeOperation = "destination-out";
+  ctx.drawImage(maskCanvas,0,0);
+  ctx.globalCompositeOperation = "source-over";
 
   requestAnimationFrame(render);
 }
 render();
 
-// ----------------------
-// INPUT
-// ----------------------
-function pos(e) {
+// 🎮 input
+function getPos(e){
   const t = e.touches ? e.touches[0] : e;
-  return { x: t.clientX, y: t.clientY };
+  return {x:t.clientX,y:t.clientY};
 }
 
-window.addEventListener('pointerdown', e => {
-  isDrawing = true;
-  last = pos(e);
+window.addEventListener("pointerdown",(e)=>{
+  drawing = true;
+  last = getPos(e);
 });
 
-window.addEventListener('pointermove', e => {
-  if (!isDrawing || !ready) return;
-  const p = pos(e);
-  drawLine(p.x, p.y);
+window.addEventListener("pointermove",(e)=>{
+  if(!drawing) return;
+  const p = getPos(e);
+  drawScratch(p.x,p.y);
 });
 
-window.addEventListener('pointerup', () => {
-  isDrawing = false;
-  last = null;
-});
+window.addEventListener("pointerup",()=>drawing=false);
 
-// ----------------------
-// FIX: ALWAYS ALLOW NEXT LEVEL
-// ----------------------
-document.getElementById('overlay').addEventListener('click', () => {
-  // OLD BUG FIX: no requirement check anymore
-  step = step + 1;
-
-  if (step >= steps.length) step = steps.length - 1;
-
-  loadStep(step);
-});
-
-// ----------------------
-// TESTS
-// ----------------------
-console.assert(steps.length === 3, 'Must have 3 steps');
-console.assert(typeof render === 'function', 'Render loop missing');
-console.assert(brushSize > 50, 'Brush too small');
-
-loadStep(0);
 </script>
 </body>
 </html>
