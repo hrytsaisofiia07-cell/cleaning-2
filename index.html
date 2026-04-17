@@ -187,9 +187,7 @@ function drawLine(x, y) {
 
   last = { x, y };
 
-  // FIX: progress is now stroke-based (NOT pixel sampling)
   strokes += 1;
-
   updateProgress();
 }
 
@@ -252,22 +250,23 @@ window.addEventListener('pointerup', () => {
 });
 
 // ----------------------
-// STEP CHANGE
+// FIX: ALWAYS ALLOW NEXT LEVEL
 // ----------------------
 document.getElementById('overlay').addEventListener('click', () => {
-  const required = steps[step].required;
-  if (strokes >= required) {
-    step = Math.min(step + 1, steps.length - 1);
-    loadStep(step);
-  }
+  // OLD BUG FIX: no requirement check anymore
+  step = step + 1;
+
+  if (step >= steps.length) step = steps.length - 1;
+
+  loadStep(step);
 });
 
 // ----------------------
 // TESTS
 // ----------------------
-console.assert(steps.every(s => s.required > 0), 'Each step must have required strokes');
-console.assert(brushSize > 50, 'Brush too small for gameplay feel');
+console.assert(steps.length === 3, 'Must have 3 steps');
 console.assert(typeof render === 'function', 'Render loop missing');
+console.assert(brushSize > 50, 'Brush too small');
 
 loadStep(0);
 </script>
