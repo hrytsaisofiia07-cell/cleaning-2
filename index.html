@@ -106,18 +106,16 @@ resize();
 // SCENES
 // ----------------------
 const steps = [
-  { top: 'img1.jpg', bottom: 'img2.jpg' },
-  { top: 'img4.jpg', bottom: 'img3.jpg' },
-  { top: 'img5.jpg', bottom: null }
+  { top: 'img1.jpg', bottom: 'img2.jpg', required: 55 },
+  { top: 'img4.jpg', bottom: 'img3.jpg', required: 60 },
+  { top: 'img5.jpg', bottom: null, required: 40 }
 ];
 
 let step = 0;
 let isDrawing = false;
 let last = null;
 
-// MORE FORGIVING SWIPE
 const brushSize = 85;
-const ease = 0.35;
 
 let topImg = new Image();
 let bottomImg = new Image();
@@ -125,8 +123,7 @@ let topReady = false;
 let bottomReady = false;
 let ready = false;
 
-let revealed = 0;
-let lastProgressTime = 0;
+let strokes = 0;
 
 function setReady() {
   ready = (steps[step].top ? topReady : true) && (steps[step].bottom ? bottomReady : true);
@@ -134,7 +131,7 @@ function setReady() {
 
 function loadStep(i) {
   step = i;
-  revealed = 0;
+  strokes = 0;
   ready = false;
   topReady = false;
   bottomReady = false;
@@ -163,15 +160,15 @@ function loadStep(i) {
 }
 
 // ----------------------
-// SMOOTH BRUSH STROKE
+// DRAW
 // ----------------------
 function drawLine(x, y) {
   if (!last) last = { x, y };
 
   const dx = x - last.x;
   const dy = y - last.y;
-
-  const steps = Math.max(1, Math.floor(Math.hypot(dx, dy) / 2));
+  const dist = Math.hypot(dx, dy);
+  const steps = Math.max(1, Math.floor(dist / 2));
 
   for (let i = 0; i <= steps; i++) {
     const px = last.x + dx * (i / steps);
@@ -189,30 +186,26 @@ function drawLine(x, y) {
   }
 
   last = { x, y };
+
+  // FIX: progress is now stroke-based (NOT pixel sampling)
+  strokes += 1;
+
+  updateProgress();
 }
 
 function updateProgress() {
-  const now = performance.now();
-  if (now - lastProgressTime < 120) return;
-  lastProgressTime = now;
+  const required = steps[step].required;
+  const percent = Math.min(100, (strokes / required) * 100);
 
-  const data = maskCtx.getImageData(0, 0, w, h).data;
-  let clear = 0;
+  document.getElementById('progress').style.width = percent + '%';
 
-  for (let i = 3; i < data.length; i += 12) {
-    if (data[i] < 10) clear++;
-  }
-
-  revealed = (clear / (data.length / 4)) * 100;
-  document.getElementById('progress').style.width = revealed + '%';
-
-  if (revealed > 88) {
+  if (percent >= 100) {
     document.getElementById('overlay').style.visibility = 'visible';
   }
 }
 
 // ----------------------
-// RENDER LOOP
+// RENDER
 // ----------------------
 function render() {
   ctx.clearRect(0, 0, w, h);
@@ -235,7 +228,7 @@ function render() {
 render();
 
 // ----------------------
-// INPUT (EASIER SWIPE)
+// INPUT
 // ----------------------
 function pos(e) {
   const t = e.touches ? e.touches[0] : e;
@@ -251,7 +244,6 @@ window.addEventListener('pointermove', e => {
   if (!isDrawing || !ready) return;
   const p = pos(e);
   drawLine(p.x, p.y);
-  updateProgress();
 });
 
 window.addEventListener('pointerup', () => {
@@ -260,10 +252,11 @@ window.addEventListener('pointerup', () => {
 });
 
 // ----------------------
-// STEP CONTROL
+// STEP CHANGE
 // ----------------------
 document.getElementById('overlay').addEventListener('click', () => {
-  if (revealed > 88) {
+  const required = steps[step].required;
+  if (strokes >= required) {
     step = Math.min(step + 1, steps.length - 1);
     loadStep(step);
   }
@@ -272,8 +265,8 @@ document.getElementById('overlay').addEventListener('click', () => {
 // ----------------------
 // TESTS
 // ----------------------
-console.assert(steps.length === 3, 'Must have 3 steps');
-console.assert(brushSize > 50, 'Brush should be large for easy swipe');
+console.assert(steps.every(s => s.required > 0), 'Each step must have required strokes');
+console.assert(brushSize > 50, 'Brush too small for gameplay feel');
 console.assert(typeof render === 'function', 'Render loop missing');
 
 loadStep(0);
