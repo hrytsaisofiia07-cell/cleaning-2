@@ -20,7 +20,6 @@ canvas {
   height: 100vh;
 }
 
-/* START SCREEN */
 #startScreen {
   position: absolute;
   width: 100%;
@@ -31,7 +30,6 @@ canvas {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  text-align: center;
   z-index: 10;
 }
 
@@ -41,7 +39,6 @@ canvas {
   font-size: 18px;
 }
 
-/* UI TEXT */
 #text {
   position: absolute;
   bottom: 30px;
@@ -52,7 +49,6 @@ canvas {
   opacity: 0;
 }
 
-/* STARS */
 .star {
   position: absolute;
   font-size: 22px;
@@ -70,10 +66,9 @@ canvas {
 
 <body>
 
-<!-- RULES -->
 <div id="startScreen">
   <h2>🧼 Правила</h2>
-  <p>Проведи пальцем, чтобы очистить зеркало<br>и увидеть, что скрыто под ним</p>
+  <p>Проведи пальцем, чтобы очистить зеркало</p>
   <button onclick="startGame()">Начать</button>
 </div>
 
@@ -103,30 +98,32 @@ function resize() {
   topCanvas.width = w;
   topCanvas.height = h;
 
-  // полностью "закрашиваем" маску
   mctx.globalCompositeOperation = "source-over";
   mctx.fillStyle = "black";
   mctx.fillRect(0, 0, w, h);
 }
 window.addEventListener("resize", resize);
 
-// --- sounds ---
-const wipeSound = new Audio("wipe.mp3");
+// 🔊 встроенные звуки (работают без файлов)
+const wipeSound = new Audio("data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAA...");
 wipeSound.loop = true;
+wipeSound.volume = 0.4;
 
-const winSound = new Audio("win.mp3");
+const winSound = new Audio("data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAA...");
+winSound.volume = 0.8;
 
-// --- IMAGES (ИСПРАВЛЕННЫЙ ПОРЯДОК) ---
+// --- unlock sound ---
+function unlockAudio() {
+  wipeSound.play().then(()=>{wipeSound.pause(); wipeSound.currentTime=0;}).catch(()=>{});
+  winSound.play().then(()=>{winSound.pause(); winSound.currentTime=0;}).catch(()=>{});
+}
+
+// --- images ---
 const sources = {
-  // 🪟 СНАЧАЛА ЗАПОТЕВШЕЕ ЗЕРКАЛО
-  top1: "img2.jpg",     // foggy (СТИРАЕМ)
-  bottom1: "img1.jpg",  // девушка появляется
-
-  // второй этап
+  top1: "img2.jpg",     // fog
+  bottom1: "img1.jpg",  // girl
   top2: "img3.jpg",
   bottom2: "img4.jpg",
-
-  // финал
   final: "img5.jpg"
 };
 
@@ -153,6 +150,7 @@ let gameStarted = false;
 
 // --- start ---
 function startGame() {
+  unlockAudio();
   document.getElementById("startScreen").style.display = "none";
   gameStarted = true;
   resize();
@@ -190,7 +188,7 @@ function brush(x, y) {
   }
 }
 
-// --- smooth line ---
+// --- line ---
 function line(x1, y1, x2, y2) {
   const dist = Math.hypot(x2 - x1, y2 - y1);
   const steps = dist / 4;
@@ -205,7 +203,6 @@ function line(x1, y1, x2, y2) {
 // --- input ---
 canvas.addEventListener("pointerdown", e => {
   if (!gameStarted) return;
-
   drawing = true;
 
   wipeSound.currentTime = 0;
@@ -232,10 +229,6 @@ canvas.addEventListener("pointerup", () => {
   wipeSound.pause();
 });
 
-canvas.addEventListener("click", () => {
-  if (progress > 0.35) next();
-});
-
 // --- stars ---
 function spawnStars() {
   for (let i = 0; i < 12; i++) {
@@ -247,7 +240,6 @@ function spawnStars() {
     s.style.top = Math.random() * 100 + "%";
 
     document.body.appendChild(s);
-
     setTimeout(() => s.remove(), 1000);
   }
 }
@@ -271,14 +263,11 @@ function draw() {
     return;
   }
 
-  // нижний слой
   ctx.drawImage(bottom, 0, 0, w, h);
 
-  // верхний слой
   tctx.clearRect(0, 0, w, h);
   tctx.drawImage(top, 0, 0, w, h);
 
-  // стираем верх
   tctx.globalCompositeOperation = "destination-out";
   tctx.drawImage(mask, 0, 0);
   tctx.globalCompositeOperation = "source-over";
@@ -289,27 +278,22 @@ function draw() {
 }
 
 // --- next ---
-function next() {
-  step++;
-  progress = 0;
+canvas.addEventListener("click", () => {
+  if (progress > 0.35) {
+    step++;
+    progress = 0;
 
-  // восстанавливаем маску
-  mctx.globalCompositeOperation = "source-over";
-  mctx.fillStyle = "black";
-  mctx.fillRect(0, 0, w, h);
+    mctx.globalCompositeOperation = "source-over";
+    mctx.fillStyle = "black";
+    mctx.fillRect(0, 0, w, h);
 
-  document.getElementById("text").style.opacity = 0;
+    document.getElementById("text").style.opacity = 0;
 
-  winSound.play();
-  spawnStars();
-
-  if (step === 3) {
-    document.getElementById("text").innerText = "🎉 Поздравляем!";
-    document.getElementById("text").style.opacity = 1;
+    winSound.play();
+    spawnStars();
   }
-}
+});
 
-// --- init ---
 function init() {}
 </script>
 
