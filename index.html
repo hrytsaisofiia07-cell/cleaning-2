@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+  }
+
+  last = { x, y };
+}
+
+function updateProgress() {
+  const now = performance.now();
+  if (now - lastProgressTime < 120) return;
+  lastProgressTime = now;
+
+  const data = maskCtx.getImageData(0, 0, w, h).data;
+  let clear = 0;
+
+  for (let i = 3; i < data.length; i += 12) {
+    if (data[i] < 10) clear++;
+  }
+
+  revealed = (clear / (data.length / 4)) * 100;
+  document.getElementById('progress').style.width = revealed + '%';
+
+  if (revealed > 88) {
+    document.getElementById('overlay').style.visibility = 'visible';
+  }
+}
+
+// ----------------------
+// RENDER LOOP
+// ----------------------
+function render() {
+  ctx.clearRect(0, 0, w, h);
+
+  if (ready) {
+    if (steps[step].bottom && bottomImg.complete) {
+      ctx.drawImage(bottomImg, 0, 0, w, h);
+    }
+
+    if (steps[step].top && topImg.complete) {
+      ctx.drawImage(topImg, 0, 0, w, h);
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.drawImage(maskCanvas, 0, 0);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+  }
+
+  requestAnimationFrame(render);
+}
+render();
+
+// ----------------------
+// INPUT (EASIER SWIPE)
+// ----------------------
+function pos(e) {
+  const t = e.touches ? e.touches[0] : e;
+  return { x: t.clientX, y: t.clientY };
+}
+
+window.addEventListener('pointerdown', e => {
+  isDrawing = true;
+  last = pos(e);
+});
+
+window.addEventListener('pointermove', e => {
+  if (!isDrawing || !ready) return;
+  const p = pos(e);
+  drawLine(p.x, p.y);
+  updateProgress();
+});
+
+window.addEventListener('pointerup', () => {
+  isDrawing = false;
+  last = null;
+});
+
+// ----------------------
+// STEP CONTROL
+// ----------------------
+document.getElementById('overlay').addEventListener('click', () => {
+  if (revealed > 88) {
+    step = Math.min(step + 1, steps.length - 1);
+    loadStep(step);
+  }
+});
+
+// ----------------------
+// TESTS
+// ----------------------
+console.assert(steps.length === 3, 'Must have 3 steps');
+console.assert(brushSize > 50, 'Brush should be large for easy swipe');
+console.assert(typeof render === 'function', 'Render loop missing');
+
+loadStep(0);
+</script>
+</body>
+</html>
